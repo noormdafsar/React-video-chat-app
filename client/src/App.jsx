@@ -1,16 +1,21 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
 import './App.css'
+import Home from './pages/Home'
+import { SocketProvider } from './providers/socket' // Import the SocketProvider
 
 function App() {
 
   return (
-    <div className='App'>
-      <Routes>
-        <Route path='/' element={<h1>Home</h1>} />
-      </Routes>
+    <div className='min-h-screen w-full bg-gray-700 text-white'>
+
+      <SocketProvider>
+        <Routes>
+          <Route path='/' element={<Home />} />
+        </Routes>
+      </SocketProvider>
     </div>
-  )
+  );
 }
 
 export default App
