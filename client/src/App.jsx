@@ -1,4 +1,4 @@
-import React from 'react'
+// import React from "react";    // React import removed as it's not used in this file
 import { Routes, Route } from 'react-router-dom'
 import './App.css'
 import Home from './pages/Home'

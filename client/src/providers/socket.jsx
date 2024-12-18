@@ -4,6 +4,8 @@ import { io } from 'socket.io-client';
 
 const SocketContext = new React.createContext(null);
 
+// useSocket.js
+// import { SocketContext } from '../context/socket';
 export const useSocket = () => {
     const context = React.useContext(SocketContext);
     if (!context) {
@@ -12,14 +14,11 @@ export const useSocket = () => {
     return context;
 };
 
-export const SocketProvider = (props) = () => {
+export const SocketProvider = ( props ) => {
     const socket = useMemo( 
         () => 
-        io({
-            host: 'localhost',
-            port: 3001,
-        }),
-        []
+            io('http://localhost:3001'),
+            []
     );
     return (
         <SocketContext.Provider value={{socket}}>
@@ -27,3 +26,9 @@ export const SocketProvider = (props) = () => {
         </SocketContext.Provider>
     )
 }
+
+import PropTypes from 'prop-types';
+
+SocketProvider.propTypes = {
+    children: PropTypes.node.isRequired,
+};
