@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import './App.css'
 import Home from './pages/Home'
 import { SocketProvider } from './providers/socket' // Import the SocketProvider
+import Room from './pages/Room'
 
 function App() {
 
@@ -12,10 +13,11 @@ function App() {
       <SocketProvider>
         <Routes>
           <Route path='/' element={<Home />} />
+          <Route path='/room/:roomId' element={<Room />} />
         </Routes>
       </SocketProvider>
     </div>
   );
 }
 
-export default App
+export default App;

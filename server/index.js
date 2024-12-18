@@ -18,13 +18,14 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const emailToSocketMap = new Map();
 
 io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
+//  console.log(`User connected: ${socket.id}`);
   
   socket.on('join-room', (data) => {
       const { roomId, emailId, userId } = data;
       console.log('Received join request:', { emailId, roomId, userId });
       emailToSocketMap.set(emailId, socket.id);
       socket.join(roomId);
+      socket.emit("joined-room", { roomId });
       socket.broadcast.to(roomId).emit('user-joined', { userId, emailId });
       console.log(`User ${emailId} successfully joined room ${roomId}`);
   });
