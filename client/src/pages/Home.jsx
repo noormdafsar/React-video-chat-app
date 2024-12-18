@@ -7,12 +7,14 @@ const Home = () => {
   const [roomId, setRoomId] = useState(''); // Initialize with empty string
   
   const handleJoinRoom = () => {
+    console.log('Send join request:', { email, roomId });
     socket.emit('join-room', {
       emailId: email,
       roomId: roomId,
       userId: socket.id,
     });
   };
+
 
   return (
     <div className="flex flex-col items-center justify-center h-screen">
