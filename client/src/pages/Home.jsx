@@ -1,29 +1,30 @@
 import { useState, useEffect } from 'react'
 import { useSocket } from '../providers/socket'
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom'
 
 const Home = () => {
   const { socket } = useSocket();
   const navigate = useNavigate();
-
-  const [email, setEmail] = useState('');  // Initialize with empty string
-  const [roomId, setRoomId] = useState(''); // Initialize with empty string
+  const [email, setEmail] = useState('');
+  const [roomId, setRoomId] = useState('');
 
   const handleRoomJoined = ({ roomId }) => {
-    console.log('Room joined:', roomId);
+    console.log('Room joined, navigating to:', roomId);
     navigate(`/room/${roomId}`);
   };
-  
+
   useEffect(() => {
-    socket.on('room-joined', handleRoomJoined);
+    // Listen for joined-room event (match the server event name exactly)
+    socket.on('joined-room', handleRoomJoined);
+    
     return () => {
-      socket.off('room-joined', handleRoomJoined);
+      socket.off('joined-room', handleRoomJoined);
     };
   }, [socket, navigate]);
-  
+
   const handleJoinRoom = () => {
-    console.log('Send join request:', { email, roomId });
-    if(email && roomId) {
+    if (email && roomId) {
+      console.log('Joining room:', { email, roomId });
       socket.emit('join-room', {
         emailId: email,
         roomId: roomId,
