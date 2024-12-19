@@ -40,7 +40,7 @@ const LobbyScreen = () => {
   }, [socket, handleJoinRoom]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-2xl p-8 space-y-6">
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
           Join Meeting

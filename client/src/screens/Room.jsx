@@ -1,7 +1,13 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import ReactPlayer from "react-player";
 import peer from "../service/peer";
 import { useSocket } from "../context/SocketProvider";
+import { 
+  FaMicrophone, FaMicrophoneSlash,
+  FaVideo, FaVideoSlash,
+  FaDesktop, FaPhoneSlash,
+  FaRecordVinyl, FaStopCircle,
+  FaUserFriends
+} from 'react-icons/fa';
 
 const RoomPage = () => {
   const socket = useSocket();
@@ -14,6 +20,8 @@ const RoomPage = () => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
+  const myVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
 
   const toggleRecording = async () => {
     if (isRecording) {
@@ -42,7 +50,6 @@ const RoomPage = () => {
     }
   };
 
-
   const handleUserJoined = useCallback(({ email, id }) => {
     console.log(`Email ${email} joined room`);
     setRemoteSocketId(id);
@@ -55,9 +62,17 @@ const RoomPage = () => {
         audio: true,
         video: true,
       });
+      
+      // Add tracks to peer connection before creating offer
+      peer.addTracks(stream);
+      
       const offer = await peer.getOffer();
       socket.emit("user:call", { to: remoteSocketId, offer });
+      
       setMyStream(stream);
+      if (myVideoRef.current) {
+        myVideoRef.current.srcObject = stream;
+      }
       setConnectionStatus('connected');
     } catch (error) {
       console.error('Error starting call:', error);
@@ -65,28 +80,35 @@ const RoomPage = () => {
       setIsLoading(false);
     }
   }, [remoteSocketId, socket]);
-
+  
   const handleIncommingCall = useCallback(
     async ({ from, offer }) => {
       setRemoteSocketId(from);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
-      });
-      setMyStream(stream);
-      console.log(`Incoming Call`, from, offer);
-      const ans = await peer.getAnswer(offer);
-      socket.emit("call:accepted", { to: from, ans });
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true,
+        });
+        
+        // Add tracks to peer connection
+        peer.addTracks(stream);
+        
+        setMyStream(stream);
+        if (myVideoRef.current) {
+          myVideoRef.current.srcObject = stream;
+        }
+        
+        console.log(`Incoming Call`, from, offer);
+        const ans = await peer.getAnswer(offer);
+        socket.emit("call:accepted", { to: from, ans });
+      } catch (error) {
+        console.error('Error handling incoming call:', error);
+      }
     },
     [socket]
   );
 
   const sendStreams = useCallback(() => {
-    // Clear existing senders before adding new tracks
-    const senders = peer.peer.getSenders();
-    senders.forEach((sender) => peer.peer.removeTrack(sender));
-
-    // Now add new tracks
     for (const track of myStream.getTracks()) {
       peer.peer.addTrack(track, myStream);
     }
@@ -97,7 +119,8 @@ const RoomPage = () => {
       peer.setLocalDescription(ans);
       console.log("Call Accepted!");
       sendStreams();
-    },    [sendStreams]
+    },
+    [sendStreams]
   );
 
   const handleNegoNeeded = useCallback(async () => {
@@ -131,19 +154,31 @@ const RoomPage = () => {
       });
       const videoTrack = screenStream.getVideoTracks()[0];
       
-      // Replace video track
       const senders = peer.peer.getSenders();
       const sender = senders.find(s => s.track?.kind === 'video');
       if (sender) {
         sender.replaceTrack(videoTrack);
       }
       
-      // Update local stream
       setMyStream(screenStream);
+      if (myVideoRef.current) {
+        myVideoRef.current.srcObject = screenStream;
+      }
       
-      // Handle screen share stop
-      videoTrack.onended = () => {
-        handleCallUser(); // Revert to camera
+      videoTrack.onended = async () => {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        });
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        const senders = peer.peer.getSenders();
+        const sender = senders.find(s => s.track?.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(newVideoTrack);
+        }
+        setMyStream(newStream);
+        if (myVideoRef.current) {
+          myVideoRef.current.srcObject = newStream;
+        }
       };
     } catch (error) {
       console.log('Error sharing screen:', error);
@@ -174,14 +209,20 @@ const RoomPage = () => {
     setMyStream(null);
     setRemoteStream(null);
     setRemoteSocketId(null);
-    window.location.href = '/'; // Redirect to home
+    window.location.href = '/';
   };
 
   useEffect(() => {
     peer.peer.addEventListener("track", async (ev) => {
-      const remoteStream = ev.streams;
+      const remoteStream = new MediaStream();
+      ev.streams[0].getTracks().forEach((track) => {
+        remoteStream.addTrack(track);
+      });
       console.log("GOT TRACKS!!");
-      setRemoteStream(remoteStream[0]);
+      setRemoteStream(remoteStream);
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
     });
   }, []);
 
@@ -209,122 +250,144 @@ const RoomPage = () => {
   ]);
 
   return (
-    <div className="min-h-screen bg-gray-900 p-4 md:p-8">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6 bg-gray-800 p-4 rounded-lg">
-        <h1 className="text-xl text-white font-semibold">
-          {remoteSocketId ? "Meeting Connected" : "Waiting for participants..."}
-        </h1>
-        <div className="flex gap-3">
-          {myStream && (
-            <button 
-              onClick={sendStreams}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition"
-            >
-              Share Screen
-            </button>
-          )}
-          {remoteSocketId && (
-            <button 
-              onClick={handleCallUser}
-              disabled={isLoading}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition"
-            >
-              Start Call
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Add below the header */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${
-              connectionStatus === 'connected' ? 'bg-green-500' : 'bg-yellow-500'
-            }`} />
-            <span className="text-white">
-              {connectionStatus === 'connected' ? 'Connected' : 'Connecting...'}
-            </span>
-          </div>
-          {isRecording && (
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-red-500">Recording</span>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
+      {/* Premium Header */}
+      <div className="bg-black/40 backdrop-blur-sm border-b border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl text-white font-semibold">
+              {remoteSocketId ? "Meeting Connected" : "Waiting for participants..."}
+            </h1>
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+              connectionStatus === 'connected' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${
+                connectionStatus === 'connected' ? 'bg-green-500' : 'bg-yellow-500'
+              } animate-pulse`} />
+              <span className="text-sm font-medium">
+                {connectionStatus === 'connected' ? 'Connected' : 'Connecting...'}
+              </span>
             </div>
-          )}
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {isRecording && (
+              <div className="flex items-center gap-2 bg-red-500/20 text-red-500 px-3 py-1 rounded-full">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-sm font-medium">Recording</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 bg-blue-500/20 text-blue-500 px-3 py-1 rounded-full">
+              <FaUserFriends className="w-4 h-4" />
+              <span className="text-sm font-medium">2 Participants</span>
+            </div>
+            {remoteSocketId && (
+              <button
+                onClick={handleCallUser}
+                disabled={isLoading}
+                className={`bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Connecting...
+                  </span>
+                ) : (
+                  'Start Call'
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Video Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-6xl mx-auto">
+      <div className="flex-1 flex flex-col md:flex-row gap-4 p-4 max-w-7xl mx-auto">
         {myStream && (
-          <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video">
-            <ReactPlayer
-              playing={!isVideoOff}
-              muted={isAudioMuted}
-              height="100%"
-              width="100%"
-              url={myStream}
-              className="absolute top-0 left-0"
+          <div className="relative flex-1 bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+            <video
+              ref={myVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded-lg">
-              <span className="text-white text-sm">You</span>
+            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg">
+              <span className="text-white text-sm font-medium">You</span>
             </div>
           </div>
         )}
         
         {remoteStream && (
-          <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video">
-            <ReactPlayer
-              playing={!isVideoOff}
-              muted={isAudioMuted}
-              height="100%"
-              width="100%"
-              url={remoteStream}
-              className="absolute top-0 left-0"
+          <div className="relative flex-1 bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded-lg">
-              <span className="text-white text-sm">Remote User</span>
+            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg">
+              <span className="text-white text-sm font-medium">Remote User</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Controls */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 p-4">
-        <div className="flex justify-center gap-4 max-w-md mx-auto">
-          <button 
-            onClick={handleEndCall}
-            className="p-4 rounded-full bg-red-600 hover:bg-red-700 text-white transition"
-          >
-            <span>End Call</span>
-          </button>
-          <button 
-            onClick={toggleAudio}
-            className={`p-4 rounded-full ${isAudioMuted ? 'bg-red-600' : 'bg-gray-700'} hover:bg-gray-600 text-white transition`}
-          >
-            <span>{isAudioMuted ? 'Unmute' : 'Mute'}</span>
-          </button>
-          <button 
-            onClick={toggleVideo}
-            className={`p-4 rounded-full ${isVideoOff ? 'bg-red-600' : 'bg-gray-700'} hover:bg-gray-600 text-white transition`}
-          >
-            <span>{isVideoOff ? 'Start Video' : 'Stop Video'}</span>
-          </button>
-          
-          <button
-            onClick={toggleRecording}
-            className={`p-4 rounded-full ${isRecording ? 'bg-red-600' : 'bg-gray-700'} hover:bg-gray-600 text-white transition`}
-          >
-            <span>{isRecording ? 'Stop Recording' : 'Start Recording'}</span>
-          </button>
-          <button 
-            onClick={handleShareScreen}
-            className="p-4 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition"
-          >
-            <span>Share Screen</span>
-          </button>
+      {/* Premium Controls */}
+      <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-lg border-t border-gray-700">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-center gap-6">
+            <button
+              onClick={toggleAudio}
+              className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-all duration-200 ${
+                isAudioMuted ? 'bg-red-500/20 text-red-500' : 'bg-gray-700/50 text-white hover:bg-gray-600/50'
+              }`}
+            >
+              {isAudioMuted ? <FaMicrophoneSlash size={24} /> : <FaMicrophone size={24} />}
+              <span className="text-xs">{isAudioMuted ? 'Unmute' : 'Mute'}</span>
+            </button>
+
+            <button
+              onClick={toggleVideo}
+              className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-all duration-200 ${
+                isVideoOff ? 'bg-red-500/20 text-red-500' : 'bg-gray-700/50 text-white hover:bg-gray-600/50'
+              }`}
+            >
+              {isVideoOff ? <FaVideoSlash size={24} /> : <FaVideo size={24} />}
+              <span className="text-xs">{isVideoOff ? 'Start Video' : 'Stop Video'}</span>
+            </button>
+
+            <button
+              onClick={handleShareScreen}
+              className="flex flex-col items-center gap-2 p-3 rounded-lg bg-gray-700/50 text-white hover:bg-gray-600/50 transition-all duration-200"
+            >
+              <FaDesktop size={24} />
+              <span className="text-xs">Share Screen</span>
+            </button>
+
+            <button
+              onClick={toggleRecording}
+              className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-all duration-200 ${
+                isRecording ? 'bg-red-500/20 text-red-500' : 'bg-gray-700/50 text-white hover:bg-gray-600/50'
+              }`}
+            >
+              {isRecording ? <FaStopCircle size={24} /> : <FaRecordVinyl size={24} />}
+              <span className="text-xs">{isRecording ? 'Stop Recording' : 'Record'}</span>
+            </button>
+
+            <button
+              onClick={handleEndCall}
+              className="flex flex-col items-center gap-2 p-3 rounded-lg bg-red-500/20 text-red-500 hover:bg-red-500/30 transition-all duration-200"
+            >
+              <FaPhoneSlash size={24} />
+              <span className="text-xs">End Call</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
