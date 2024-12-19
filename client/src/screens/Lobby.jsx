@@ -5,6 +5,7 @@ import { useSocket } from "../context/SocketProvider";
 const LobbyScreen = () => {
   const [email, setEmail] = useState("");
   const [room, setRoom] = useState("");
+  const [error, setError] = useState("");
 
   const socket = useSocket();
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const LobbyScreen = () => {
   const handleSubmitForm = useCallback(
     (e) => {
       e.preventDefault();
+      setError("");
       socket.emit("room:join", { email, room });
     },
     [email, room, socket]
@@ -27,8 +29,13 @@ const LobbyScreen = () => {
 
   useEffect(() => {
     socket.on("room:join", handleJoinRoom);
+    socket.on("room:error", ({ message }) => {
+      setError(message);
+    });
+
     return () => {
       socket.off("room:join", handleJoinRoom);
+      socket.off("room:error");
     };
   }, [socket, handleJoinRoom]);
 
@@ -38,11 +45,17 @@ const LobbyScreen = () => {
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
           Join Meeting
         </h1>
-        
+
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmitForm} className="space-y-6">
           <div className="space-y-2">
-            <label 
-              htmlFor="email" 
+            <label
+              htmlFor="email"
               className="block text-sm font-medium text-gray-700"
             >
               Email Address
@@ -54,12 +67,13 @@ const LobbyScreen = () => {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 outline-none"
               placeholder="Enter your email"
+              required
             />
           </div>
 
           <div className="space-y-2">
-            <label 
-              htmlFor="room" 
+            <label
+              htmlFor="room"
               className="block text-sm font-medium text-gray-700"
             >
               Meeting ID
@@ -71,6 +85,7 @@ const LobbyScreen = () => {
               onChange={(e) => setRoom(e.target.value)}
               className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 outline-none"
               placeholder="Enter meeting ID"
+              required
             />
           </div>
 

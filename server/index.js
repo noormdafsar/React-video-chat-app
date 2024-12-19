@@ -15,18 +15,46 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const emailToSocketIdMap = new Map();
+const emailToSocketMap = new Map();
 const socketidToEmailMap = new Map();
 
 io.on("connection", (socket) => {
-  console.log(`Socket Connected`, socket.id);
+  console.log(`User connected: ${socket.id}`);
+  
   socket.on("room:join", (data) => {
     const { email, room } = data;
-    emailToSocketIdMap.set(email, socket.id);
+    
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      socket.emit("room:error", { 
+        message: "Please enter a valid email address" 
+      });
+      return;
+    }
+
+    // Check for duplicate email
+    if (emailToSocketMap.has(email)) {
+      socket.emit("room:error", { 
+        message: "This email is already in use in another session" 
+      });
+      return;
+    }
+
+    console.log(`User ${email} joining room ${room}`);
+    emailToSocketMap.set(email, socket.id);
     socketidToEmailMap.set(socket.id, email);
-    io.to(room).emit("user:joined", { email, id: socket.id });
     socket.join(room);
+    io.to(room).emit("user:joined", { email, id: socket.id });
     io.to(socket.id).emit("room:join", data);
+
+    // Cleanup on disconnect
+    socket.on("disconnect", () => {
+      const email = socketidToEmailMap.get(socket.id);
+      emailToSocketMap.delete(email);
+      socketidToEmailMap.delete(socket.id);
+      console.log(`User disconnected: ${email}`);
+    });
   });
 
   socket.on("user:call", ({ to, offer }) => {
@@ -48,12 +76,8 @@ io.on("connection", (socket) => {
   });
 });
 
-
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
 io.listen(3000);
-
-
-
