@@ -5,11 +5,26 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 dotenv.config();
 const { Server } = require('socket.io');
-const io = new Server({
-  cors: true,
+
+const PORT = process.env.PORT || 3002;
+
+// Create HTTP server first
+const server = app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
 
-const PORT = process.env.PORT || 4000;
+// Initialize Socket.IO with the server instance
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  },
+  allowEIO3: true,
+  transports: ['websocket', 'polling']
+});
+
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -24,19 +39,17 @@ io.on("connection", (socket) => {
   socket.on("room:join", (data) => {
     const { email, room } = data;
     
-    // Email format validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      socket.emit("room:error", { 
-        message: "Please enter a valid email address" 
+      socket.emit("room:error", {
+        message: "Please enter a valid email address"
       });
       return;
     }
 
-    // Check for duplicate email
     if (emailToSocketMap.has(email)) {
-      socket.emit("room:error", { 
-        message: "This email is already in use in another session" 
+      socket.emit("room:error", {
+        message: "This email is already in use in another session"
       });
       return;
     }
@@ -47,14 +60,6 @@ io.on("connection", (socket) => {
     socket.join(room);
     io.to(room).emit("user:joined", { email, id: socket.id });
     io.to(socket.id).emit("room:join", data);
-
-    // Cleanup on disconnect
-    socket.on("disconnect", () => {
-      const email = socketidToEmailMap.get(socket.id);
-      emailToSocketMap.delete(email);
-      socketidToEmailMap.delete(socket.id);
-      console.log(`User disconnected: ${email}`);
-    });
   });
 
   socket.on("user:call", ({ to, offer }) => {
@@ -74,10 +79,11 @@ io.on("connection", (socket) => {
     console.log("peer:nego:done", ans);
     io.to(to).emit("peer:nego:final", { from: socket.id, ans });
   });
+
+  socket.on("disconnect", () => {
+    const email = socketidToEmailMap.get(socket.id);
+    emailToSocketMap.delete(email);
+    socketidToEmailMap.delete(socket.id);
+    console.log(`User disconnected: ${email}`);
+  });
 });
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
-
-
