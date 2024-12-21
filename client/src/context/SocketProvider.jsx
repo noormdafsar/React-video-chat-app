@@ -10,7 +10,7 @@ export const useSocket = () => {
 
 export const SocketProvider = ({ children }) => {
     const socket = useMemo(() => {
-      const socketInstance = io("http://localhost:3001", {
+      const socketInstance = io("localhost:3001", {
         transports: ['websocket', 'polling'],
         secure: true,
         rejectUnauthorized: false,

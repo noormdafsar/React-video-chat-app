@@ -33,6 +33,9 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const emailToSocketMap = new Map();
 const socketidToEmailMap = new Map();
 
+app.get('/dummy', (req, res)=> {
+  res.send("route is working");
+})
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
   
